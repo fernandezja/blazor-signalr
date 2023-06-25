@@ -1,0 +1,58 @@
+﻿@page "/counter"
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<PageTitle>Counter (With SignalR)</PageTitle>
+
+<h1>Counter (With SignalR)</h1>
+
+<p role="status">Current count: @currentCount</p>
+
+<div class="alert alert-info">
+    This counter uses signalR to synchronize between different instances of the page.
+</div>
+
+<button class="btn btn-primary" @onclick="(async () => await IncrementCountAsync())">Click me</button>
+
+@code {
+    private HubConnection? hubConnection;
+    private int currentCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/counterhub"))
+            .Build();
+
+        hubConnection.On<int>("IncrementCount", (value) =>
+        {
+            currentCount = value;
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task IncrementCountAsync()
+    {
+        currentCount++;
+
+        if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("IncrementCount", currentCount);
+        }
+    }
+
+
+    public bool IsConnected =>
+        hubConnection?.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

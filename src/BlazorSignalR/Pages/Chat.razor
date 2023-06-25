@@ -1,0 +1,216 @@
+﻿@page "/chat"
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<PageTitle>Chat</PageTitle>
+
+<h1>Chat <span class="oi oi-chat" aria-hidden="true"></span></h1>
+
+
+    <section class="message-area">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <div class="chat-area">
+                        <div class="chatbox">
+                            <div class="modal-dialog-scrollable">
+                                <div class="modal-content">
+                                    <div class="msg-head">
+                                        <div class="row">
+                                            <div class="col-8">
+                                                <div class="d-flex align-items-center">
+                                                    <span class="chat-icon"><img class="img-fluid" src="images/arroleftt.svg" alt="image title"></span>
+                                                    <div class="flex-shrink-0">
+                                                        <img class="img-fluid chat-user-img" src="images/yoda1.jpg" alt="user img" >
+                                                    </div>
+                                                    <div class="flex-grow-1 ms-3">
+                                                        <h3>@userInput</h3>
+
+                                                    @if (userInputEditVisible)
+                                                        {
+                                                            <form action="" @onsubmit="UserInputSave">
+                                                                <input type="text" @bind="userInput" class="form-control" />
+
+                                                            <button type="button" class="btn btn-primary btn-sm" @onclick="UserInputSave">Save</button>
+                                                            </form>
+                                                        }else
+                                                        {
+                                                        <button type="button" class="btn btn-link btn-sm" @onclick="UserInputEdit">Edit</button>
+                                                        }
+
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <ul class="moreoption">
+                                                    <li class="navbar nav-item dropdown">
+                                                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa fa-ellipsis-v" aria-hidden="true"></i></a>
+                                                        <ul class="dropdown-menu">
+                                                            <li><a class="dropdown-item" href="#">Action</a></li>
+                                                            <li><a class="dropdown-item" href="#">Another action</a></li>
+                                                            <li>
+                                                                <hr class="dropdown-divider">
+                                                            </li>
+                                                            <li><a class="dropdown-item" href="#">Something else here</a></li>
+                                                        </ul>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+
+
+                                    <div class="modal-body">
+                                        <div class="msg-body">
+                                        <ul>
+                                            @foreach (var message in messages)
+                                            {
+                                                @if (message.IsUser(userInput))
+                                                {
+                                                    <li class="repaly">
+                                                        <p>@message.Message</p>
+                                                        <span class="time">@message.TimestampFormated</span>
+                                                    </li>
+                                                }else
+                                                {
+                                                    <li class="sender-content">
+                                                        <div class="sender-user">@message.User</div>
+                                                        <div class="sender">
+                                                            <p>@message.Message</p>
+                                                            <span class="time">@message.TimestampFormated</span>
+                                                        </div>
+                                                    </li>
+                                                }
+                                            }
+                                            @* 
+                                                <li>
+                                                    <div class="divider">
+                                                        <h6>Today</h6>
+                                                    </div>
+                                                </li>*@
+
+                                            </ul>
+                                        </div>
+                                    </div>
+
+
+                                    <div class="send-box">
+                                        <form action="" onsubmit="Send">
+                                            <input type="text" 
+                                                   class="form-control" 
+                                                   aria-label="message…" 
+                                                   @bind="messageInput" 
+                                                   placeholder="Write message…">
+
+                                            <button type="button" @onclick="Send" disabled="@(!IsConnected)">
+                                                <i class="fa fa-paper-plane" aria-hidden="true"></i> Send
+                                            </button>
+                                        </form>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+@code {
+    private HubConnection? hubConnection;
+    private List<ChatMessage> messages = new List<ChatMessage>();
+    private string? userInput;
+    private string? messageInput;
+    private Random random = new();
+
+    private bool userInputEditVisible = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userInput = $"User-{RandomString(7)}";
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/chathub"))
+            .Build();
+
+        hubConnection.On<ChatMessage>("ReceiveMessage", (chatMessage) =>
+        {
+            messages.Add(chatMessage);
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+
+    private async Task Send()
+    {
+        if (hubConnection is not null)
+        {
+            var chatMessage = new ChatMessage(user: userInput, message: messageInput);
+            await hubConnection.SendAsync("SendMessage", chatMessage);
+        }
+    }
+
+
+    private async Task UserInputEdit()
+    {
+        userInputEditVisible = true;
+        StateHasChanged();
+    }
+
+
+    private async Task UserInputSave()
+    {
+        userInputEditVisible = false;
+        StateHasChanged();
+    }
+
+
+    public bool IsConnected =>
+        hubConnection?.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+
+    public string RandomString(int length)
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        return new string(Enumerable.Repeat(chars, length)
+                                    .Select(s => s[random.Next(s.Length)])
+                                    .ToArray());
+    }
+
+
+    public static string CalculateMD5(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+        {
+            return string.Empty;
+        }
+
+        using (var md5 = MD5.Create())
+        {
+            byte[] inputBytes = Encoding.UTF8.GetBytes(input);
+            byte[] hashBytes = md5.ComputeHash(inputBytes);
+
+            var sb = new StringBuilder();
+
+            for (int i = 0; i < hashBytes.Length; i++)
+            {
+                sb.Append(hashBytes[i].ToString("x2"));
+            }
+
+            return sb.ToString();
+        }
+    }
+}
