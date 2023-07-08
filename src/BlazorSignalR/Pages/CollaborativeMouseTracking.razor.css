@@ -1,0 +1,31 @@
+﻿.mouse-position-tracker {
+    width: 120px;
+    height: 44px;
+    position: absolute;
+    background: teal;
+    border: 1px solid #333333;
+    transition: transform .1s ease-in-out;
+    padding: 4px;
+}
+
+    .mouse-position-tracker .username {
+        font-size: 0.9em;
+        line-height: 12px;
+    }
+
+    .mouse-position-tracker .position {
+        font-size: 0.8em;
+        color: #333333;
+    }
+
+
+.userinput-container {
+    border:1px #333333 solid;
+    padding:8px;
+    float: left;
+}
+
+.userinput-container h4 {
+    font-size:1em;
+    font-weight:bold;
+}

@@ -1,0 +1,174 @@
+﻿@page "/collaborativeMouseTracking"
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+@inject IJSRuntime JSRuntime
+
+<PageTitle>[@userInput] Collaborative Mouse Tracking (with SignalR)</PageTitle>
+
+<h1>Collaborative Mouse Tracking <span class="oi oi-bolt" aria-hidden="true"></span>  (with SignalR)</h1>
+
+<div class="alert alert-info">
+    Multiple users simultaneously submitting their mouse positions while interacting with the blazor page
+</div>
+
+<div class="userinput-container">
+    <h4>@userInput</h4>
+
+    @if (userInputEditVisible)
+    {
+        <form action="" @onsubmit="UserInputSave">
+            <input type="text" @bind="userInput" class="form-control" />
+
+            <button type="button" class="btn btn-primary btn-sm" @onclick="UserInputSave">Save</button>
+        </form>
+    }
+    else
+    {
+        <button type="button" class="btn btn-link btn-sm" @onclick="UserInputEdit">Edit</button>
+    }
+
+</div>
+
+<div id="mousePositionTrackerCurrentUser" class="mouse-position-tracker" style="background-color:#@(userInputColor);">
+    <div class="username">userInput</div>
+    <span id="mousePositionTrackerCurrentUserPosition" class="position">x: y:</span>
+</div>
+
+@foreach (var item in userMousePositions.Values)
+{
+    <div id="user-@item.UserHash" class="mouse-position-tracker" style="left:@(item.MousePositionX)px;top:@(item.MousePositionY)px;background-color:#@(item.ColorHex);">
+        <div class="username">@item.User</div>
+        <span class="position">x:@(item.MousePositionX)  y:@(item.MousePositionY)</span>
+    </div>
+}
+
+
+
+@code {
+    private HubConnection? hubConnection;
+    private UserMousePosition userMousePosition = null;
+    private IJSObjectReference scriptJS;
+    private string? userInput;
+    private string? userInputColor;
+    private bool userInputEditVisible = false;
+    private Random random = new();
+    private ColorHash colorHash = new();
+
+    private Dictionary<string, UserMousePosition> userMousePositions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        userInput = $"User-{RandomString(7)}";
+        userInputColor = colorHash.Hex(userInput);
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/mousePositionTrackerHub"))
+            .Build();
+
+        hubConnection.On<UserMousePosition>("ReceiveUserMousePosition", (userMousePosition) =>
+        {
+            if (userMousePositions.ContainsKey(userMousePosition.UserHash))
+            {
+                userMousePositions[userMousePosition.UserHash] = userMousePosition;
+
+            }else
+            {
+                userMousePositions.Add(userMousePosition.UserHash, userMousePosition);
+
+            }
+            // messages.Add(chatMessage);
+            InvokeAsync(StateHasChanged);
+        });
+
+
+
+        await hubConnection.StartAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var dotNetObjRef = DotNetObjectReference.Create(this);
+
+            scriptJS = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "/js/mousePositionTracker.js");
+
+            await JSRuntime.InvokeVoidAsync("setDotNetObjRef", dotNetObjRef);
+
+        }
+    }
+
+    [JSInvokable]
+    public async Task SendUserMousePosition(MousePosition mousePosition)
+    {
+
+        if (hubConnection is not null)
+        {
+            if (userMousePosition is null)
+            {
+                userMousePosition = new UserMousePosition(userInput);
+            }
+            userMousePosition.User = userInput;
+            userMousePosition.ColorHex = userInputColor;
+            userMousePosition.MousePositionX = mousePosition.X;
+            userMousePosition.MousePositionY = mousePosition.Y;
+
+            await hubConnection.SendAsync("SendUserMousePosition", userMousePosition);
+
+        }
+    }
+
+    // [JSInvokable]
+    // public static void SendUserMousePosition(int x, int y)
+    // {
+
+    //     if (hubConnection is not null)
+    //     {
+    //         if (userMousePosition is null)
+    //         {
+    //             userMousePosition = new UserMousePosition("Yoda");
+    //         }
+    //         userMousePosition.MousePositionX = 500;
+    //         userMousePosition.MousePositionY = 600;
+
+    //         await hubConnection.SendAsync("SendUserMousePosition", userMousePosition);
+    //     }
+    // }
+
+
+
+    public bool IsConnected =>
+        hubConnection?.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+    private async Task UserInputEdit()
+    {
+        userInputEditVisible = true;
+        StateHasChanged();
+    }
+
+
+    private async Task UserInputSave()
+    {
+        userInputEditVisible = false;
+        userInputColor = colorHash.Hex(userInput);
+        StateHasChanged();
+    }
+
+    public string RandomString(int length)
+    {
+        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        return new string(Enumerable.Repeat(chars, length)
+                                    .Select(s => s[random.Next(s.Length)])
+                                    .ToArray());
+    }
+}

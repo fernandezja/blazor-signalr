@@ -57,6 +57,7 @@ app.UseWebSockets();
 app.MapBlazorHub();
 app.MapHub<ChatHub>("/chathub");
 app.MapHub<CounterHub>("/counterhub");
+app.MapHub<MousePositionTrackerHub>("/mousePositionTrackerHub");
 app.MapFallbackToPage("/_Host");
 
 app.Run();
